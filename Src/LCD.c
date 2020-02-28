@@ -4,6 +4,7 @@
 #include "stm32f0xx.h"
 #include "LCD.h"
 #include <stdarg.h>
+#include <stdio.h>
 
 static char pos_x;
 static char pos_y;
@@ -32,10 +33,17 @@ void LCD_Init(void) {
     for (i = 0; i < SystemCoreClock / 200; i++);
 
     LCD_WriteDPort(0x02); // 4bit interface
+    // Note - on reset, the display may ALREADY be in 4-bit mode, making the next command incomplete. As a work-around, it's sent twice.
+
+    LCD_WriteCommand(0x28); // 4bit interface, 2line, 5x8 matrix
     LCD_WriteCommand(0x28); // 4bit interface, 2line, 5x8 matrix
     LCD_WriteCommand(0x0C); // display on, cursor off, blink off
     LCD_WriteCommand(0x01);	// clear
     LCD_SetCursor(0, 0);
+
+    // fflush(stdout);   // Either fflush(stdout) or stdbuf(stdout, NULL) needs to be called for printf to work properly.
+    // Remove the stdout buffer
+    setbuf(stdout, NULL);
 }
 
 void LCD_printf(const char *format, ...) {
@@ -84,6 +92,13 @@ void LCD_WriteText(char* text) {
     }
 }
 
+
+void LCD_Clear() {
+   LCD_WriteCommand(0x01);
+   pos_x = 0;
+   pos_y = 0;
+}
+
 void LCD_WriteCommand(unsigned char command) {
     PORT->BRR = PIN_RS;
     PORT->BRR = PIN_RW;
@@ -94,6 +109,7 @@ void LCD_WriteCommand(unsigned char command) {
     while (LCD_ReadBusyFlag() & 0x80) {
     }
 }
+
 
 void LCD_WriteChar(unsigned char c) {
     if (pos_y >= HEIGHT)
@@ -112,9 +128,29 @@ void LCD_WriteChar(unsigned char c) {
     pos_x++;
 
     if (pos_x == WIDTH) {
-        pos_x = 0;
-        pos_y++;
-        LCD_SetCursor(0, pos_y);
+        LCD_SetCursor(0, ++pos_y);
+    }
+}
+
+int __io_putchar(int ch)  {
+    switch(ch)
+    {
+        case '\n':
+            // LF - Line feed - Move to the next line.
+            LCD_SetCursor(0,1);
+            // LCD_Clear();    // Clear display and reset to home.
+            break;
+        case '\r':
+            // CR - Carriage Return - return to the beginning of the line.
+            LCD_SetCursor(0,pos_y);
+            break;
+        case '\f':
+            // Form feed
+            LCD_Clear();
+            break;
+        default:
+            // Write the character to the lcd at current cursor position.
+            LCD_WriteChar((unsigned char)ch);
     }
 }
 

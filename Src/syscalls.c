@@ -55,11 +55,13 @@
 #include <time.h>
 #include <sys/time.h>
 #include <sys/times.h>
+#include <unistd.h>
 
 
 /* Variables */
 //#undef errno
 extern int errno;
+
 extern int __io_putchar(int ch) __attribute__((weak));
 extern int __io_getchar(void) __attribute__((weak));
 
@@ -109,7 +111,18 @@ __attribute__((weak)) int _write(int file, char *ptr, int len)
 
 	for (DataIdx = 0; DataIdx < len; DataIdx++)
 	{
-		__io_putchar(*ptr++);
+	    switch(file)
+        {
+            case STDERR_FILENO:
+                // ITM_SendChar();     // Only available on a mcu with an ITM module.
+
+            case STDOUT_FILENO:
+            default:
+                __io_putchar(*ptr++);
+                break;
+
+
+        }
 	}
 	return len;
 }

@@ -19,11 +19,18 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
+#include <unistd.h>
+#include <DisplayState.h>
 #include "main.h"
+#include "dataLog.h"
+#include <bme280_interface.h>
+#include <HeaterFSM.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "LCD.h"
+#include "bme280.h"
+#include "stdio.h"
 
 /* USER CODE END Includes */
 
@@ -48,7 +55,22 @@ TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
 typedef enum blinkSpeed_t {OFF, SLOW, FAST};
-enum blinkSpeed_t blinkInterval = SLOW;
+enum blinkSpeed_t blinkInterval = FAST;
+
+typedef enum pressType_t {BTN_OFF, BTN_HELD, BTN_DEBOUNCE, BTN_SHORT, BTN_LONG};
+struct {
+    uint32_t pressStart;
+    uint32_t pressEnd;
+    enum pressType_t pressType;
+} buttonB1_state;
+uint32_t nextBlink = 0;
+
+#define BUTTON_DEBOUNCE 150
+#define BUTTON_LONG 2000
+
+#define SCREEN_INTERVAL 4000
+#define LOG_INTERVAL 1000
+
 
 /* USER CODE END PV */
 
@@ -59,6 +81,7 @@ static void MX_I2C2_Init(void);
 static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
+s32 bme280_data_readout_template(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -73,9 +96,15 @@ static void MX_TIM1_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+  uint32_t nextLogUpdate = 0;
+  uint32_t nextScreenUpdate = SCREEN_INTERVAL;
+
+  buttonB1_state.pressType = BTN_OFF;
+  buttonB1_state.pressEnd = 0;
+  buttonB1_state.pressStart = 0;
 
   /* USER CODE END 1 */
-  
+
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -83,6 +112,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+  dataLogInit();
 
   /* USER CODE END Init */
 
@@ -99,8 +129,17 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   LCD_Init();
-  LCD_printf("Active Drybox");
-  /* USER CODE END 2 */
+  printf("\f  Black Widow\nDrybox Restarted");
+  setInfoDisplayState(DP_INFO, 4000);
+  // fflush(stdout);   // Either fflush(stdout) or stdbuf(stdout, NULL) needs to be called for printf to work properly.
+
+
+  // Initialize the bme280
+  s32 result = bme280_interface_init();
+
+
+
+    /* USER CODE END 2 */
  
  
 
@@ -108,10 +147,118 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+      // Update the data log and FSM
+      if(nextLogUpdate < HAL_GetTick())
+      {
+          dataLogUpdate();
+          nextLogUpdate = HAL_GetTick() + LOG_INTERVAL;
+      }
 
-      // Every 2sec display the humidity
-      // display the
-    /* USER CODE END WHILE */
+      // Update the screen
+      if(nextScreenUpdate < HAL_GetTick())
+      {
+          updateDisplayState();
+          nextScreenUpdate = HAL_GetTick() + SCREEN_INTERVAL;
+      }
+
+      // Buzzer State
+      // HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
+
+      // B1 - User button state
+      // Short Press - Cycle Request
+      // Long Press - Dessicant Reset
+      switch (buttonB1_state.pressType)
+      {
+          case BTN_OFF:
+              if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_SET)
+              {
+                  // Button has been pressed.
+                  buttonB1_state.pressType = BTN_HELD;
+                  buttonB1_state.pressStart = HAL_GetTick();
+              }
+              break;
+          case BTN_HELD:
+              if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_RESET)
+              {
+                  // Button has been released.
+                  buttonB1_state.pressEnd = HAL_GetTick();
+                  buttonB1_state.pressType = BTN_DEBOUNCE;
+              }
+              break;
+          case BTN_DEBOUNCE:
+              if(HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) == GPIO_PIN_SET)
+              {
+                  // Button has bounced.
+                  buttonB1_state.pressType = BTN_HELD;
+                  // TODO - Beep after BUTTON_LONG threshold.
+              }
+              else if (buttonB1_state.pressEnd + BUTTON_DEBOUNCE < HAL_GetTick())
+              {
+                  // Button is settled.
+                  uint32_t pressTime = buttonB1_state.pressEnd - buttonB1_state.pressStart;
+                  if(pressTime > BUTTON_LONG)
+                  {
+                      buttonB1_state.pressType = BTN_LONG;
+                  }
+                  else
+                  {
+                      buttonB1_state.pressType = BTN_SHORT;
+                      // TODO - Short beep.
+                  }
+              }
+              break;
+          case BTN_SHORT:
+              blinkInterval = blinkInterval == FAST ? SLOW : FAST;
+              buttonB1_state.pressType = BTN_OFF;
+              cycleRequest();
+              break;
+          case BTN_LONG:
+              blinkInterval = OFF;
+              buttonB1_state.pressType = BTN_OFF;
+              dessicantReset();
+              break;
+          default:
+              buttonB1_state.pressType = BTN_OFF;
+              buttonB1_state.pressStart = 0;
+              buttonB1_state.pressEnd = 0;
+      }
+
+
+      // Blinkin' LED
+      unsigned int interval = 0;
+      switch(blinkInterval)
+      {
+          case OFF:
+              HAL_GPIO_WritePin(LD3_GPIO_Port,LD3_Pin,GPIO_PIN_RESET);
+              break;
+          case SLOW:
+              interval = 1000;
+              break;
+          case FAST:
+              interval = 500;
+              break;
+          default:
+              interval = 5000;
+              break;
+      }
+      if(blinkInterval != OFF)
+      {
+          if(nextBlink < HAL_GetTick())
+          {
+              HAL_GPIO_TogglePin(LD3_GPIO_Port,LD3_Pin);
+              nextBlink = HAL_GetTick() + interval;
+          }
+
+      }
+
+      // Heater Control FSM
+
+
+
+      // Watchdog Timer Reset
+
+      /* USER CODE END WHILE */
+
 
     /* USER CODE BEGIN 3 */
   }
@@ -321,7 +468,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
 /* USER CODE END 4 */
 
 /**
@@ -332,8 +478,11 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  LCD_printf( "* FATAL ERROR *");
+  while(1) {};
 
   /* USER CODE END Error_Handler_Debug */
+
 }
 
 #ifdef  USE_FULL_ASSERT

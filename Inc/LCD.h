@@ -33,5 +33,9 @@
 
 void LCD_Init(void);
 void LCD_printf(const char *format, ...);
+void LCD_Clear();
+
+// Buffer Settings
+// Internal line buffer length
 
 #endif //DRYBOX_LCD_H
