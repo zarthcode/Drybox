@@ -55,6 +55,8 @@
 #include "main.h"
 #include "bme280.h"
 #include "bme280_interface.h"
+#include "stdio.h"
+#include "DisplayState.h"
 
 #define BME280_API
 /*Enable the macro BME280_API to use this support file */
@@ -159,7 +161,7 @@ s32 bme280_interface_init(void)
      *	data acquisition/read/write is possible in this mode
      *	by using the below API able to set the power mode as NORMAL*/
     /* Set the power mode as NORMAL*/
-    com_rslt += bme280_set_power_mode(BME280_FORCED_MODE);
+    com_rslt += bme280_set_power_mode(BME280_NORMAL_MODE);
     /*	For reading the pressure, humidity and temperature data it is required to
      *	set the OSS setting of humidity, pressure and temperature
      * The "BME280_CTRLHUM_REG_OSRSH" register sets the humidity
@@ -169,12 +171,12 @@ s32 bme280_interface_init(void)
      * In the code automated reading and writing of "BME280_CTRLHUM_REG_OSRSH"
      * register first set the "BME280_CTRLHUM_REG_OSRSH" and then read and write
      * the "BME280_CTRLMEAS_REG" register in the function*/
-    com_rslt += bme280_set_oversamp_humidity(BME280_OVERSAMP_1X);
+    com_rslt += bme280_set_oversamp_humidity(BME280_OVERSAMP_16X);
 
     /* set the pressure oversampling*/
-    com_rslt += bme280_set_oversamp_pressure(BME280_OVERSAMP_1X);
+    com_rslt += bme280_set_oversamp_pressure(BME280_OVERSAMP_16X);
     /* set the temperature oversampling*/
-    com_rslt += bme280_set_oversamp_temperature(BME280_OVERSAMP_1X);
+    com_rslt += bme280_set_oversamp_temperature(BME280_OVERSAMP_16X);
 /*--------------------------------------------------------------------------*/
 /*------------------------------------------------------------------------*
 ************************* START GET and SET FUNCTIONS DATA ****************
@@ -197,6 +199,7 @@ s32 bme280_interface_init(void)
 *------------------------------------------------------------------*/
 
 /************************* END INITIALIZATION *************************/
+    return com_rslt;
 }
 
 
@@ -208,6 +211,9 @@ AND HUMIDITY DATA ********
 *---------------------------------------------------------------------*/
     /* The variable used to assign the standby time*/
     u8 v_stand_by_time_u8 = BME280_INIT_VALUE;
+    /* Variable used to determine delay time */
+    u8 v_delay_time = BME280_INIT_VALUE;
+
     /* The variable used to read uncompensated temperature*/
     s32 v_data_uncomp_temp_s32 = BME280_INIT_VALUE;
     /* The variable used to read uncompensated pressure*/
@@ -222,21 +228,35 @@ AND HUMIDITY DATA ********
     u32 v_comp_humidity_u32[2] = {BME280_INIT_VALUE, BME280_INIT_VALUE};
 
     /* result of communication results*/
-    s32 com_rslt = ERROR;
+    s32 com_rslt = bme280_set_power_mode(BME280_FORCED_MODE);
+    if(com_rslt != SUCCESS)
+    {
+        printf("\fbme280_set_power_mode %i.", com_rslt);
+        HAL_Delay(1000);
+        setInfoDisplayState(DP_CRITICAL, 15000);
+    }
 
+    com_rslt = bme280_compute_wait_time(&v_delay_time);
+    if(com_rslt != SUCCESS)
+    {
+        printf("\fbme280_set_power_mode %i.", com_rslt);
+        HAL_Delay(1000);
+        setInfoDisplayState(DP_CRITICAL, 15000);
+    }
+
+    HAL_Delay(v_delay_time);
     /* API is used to read the uncompensated humidity*/
-    com_rslt += bme280_read_uncomp_humidity(&v_data_uncomp_hum_s32);
+    //com_rslt += bme280_read_uncomp_humidity(&v_data_uncomp_hum_s32);
 
     /* API is used to read the uncompensated temperature*/
-    com_rslt += bme280_read_uncomp_temperature(&v_data_uncomp_temp_s32);
+    //com_rslt += bme280_read_uncomp_temperature(&v_data_uncomp_temp_s32);
 
     /* API is used to read the uncompensated pressure*/
-    com_rslt += bme280_read_uncomp_pressure(&v_data_uncomp_pres_s32);
-    HAL_Delay(10);
+    //com_rslt += bme280_read_uncomp_pressure(&v_data_uncomp_pres_s32);
+    //HAL_Delay(10);
     /* API is used to read the uncompensated temperature,pressure
     and humidity data */
-    com_rslt += bme280_read_uncomp_pressure_temperature_humidity(
-            &v_data_uncomp_temp_s32, &v_data_uncomp_pres_s32, &v_data_uncomp_hum_s32);
+    //com_rslt += bme280_read_uncomp_pressure_temperature_humidity(&v_data_uncomp_temp_s32, &v_data_uncomp_pres_s32, &v_data_uncomp_hum_s32);
 
 /*--------------------------------------------------------------------*
 ************ END READ UNCOMPENSATED PRESSURE AND TEMPERATURE********
@@ -247,19 +267,16 @@ AND HUMIDITY DATA ********
 AND HUMIDITY DATA ********
 *---------------------------------------------------------------------*/
     /* API is used to compute the compensated temperature*/
-    v_comp_temp_s32[0] = bme280_compensate_temperature_int32(
-            v_data_uncomp_temp_s32);
+//    v_comp_temp_s32[0] = bme280_compensate_temperature_int32(v_data_uncomp_temp_s32);
 
     /* API is used to compute the compensated pressure*/
-    v_comp_press_u32[0] = bme280_compensate_pressure_int32(
-            v_data_uncomp_pres_s32);
+//    v_comp_press_u32[0] = bme280_compensate_pressure_int32(v_data_uncomp_pres_s32);
 
     /* API is used to compute the compensated humidity*/
-    v_comp_humidity_u32[0] = bme280_compensate_humidity_int32(
-            v_data_uncomp_hum_s32);
+//    v_comp_humidity_u32[0] = bme280_compensate_humidity_int32(v_data_uncomp_hum_s32);
 
     /* API is used to read the compensated temperature, humidity and pressure*/
-    com_rslt += bme280_read_pressure_temperature_humidity(
+    com_rslt = bme280_read_pressure_temperature_humidity(
             &v_comp_press_u32[1], &v_comp_temp_s32[1], &v_comp_humidity_u32[1]);
 
     data->temperature = ((float) (v_comp_temp_s32[1]) / 100);
@@ -271,6 +288,14 @@ AND HUMIDITY DATA ********
     data->dewPoint = ((float) v_comp_temp_s32[1] / 100) - ((100 - data->humidity) / 5.);
     // dewpt = dewpt * 1.8 + 32; // Convert from C to F
     // printf("\f%2.1f\337C %.2finHg\n%2.2f%%rH DP%2.1f\337C", imp_temp, imp_press, imp_humi, dewpt);
+    if(com_rslt != SUCCESS)
+    {
+        printf("\fbme280_interface_get_data %i.", com_rslt);
+        HAL_Delay(1000);
+        setInfoDisplayState(DP_CRITICAL, 15000);
+    }
+
+    return com_rslt;
 
 }
 
@@ -395,7 +420,9 @@ s8 BME280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
     {
         // The BME280 API calls for 0 return value as a success, and -1 returned as failure
         iError = (-1);
-        // printf("\fInit:I2C_Mem_Write() Failed.");
+        printf("\fInit:I2C_Mem_Write() Failed.");
+        HAL_Delay(10000);
+        setInfoDisplayState(DP_CRITICAL, 15000);
     }
     return (s8)iError;
 #else
@@ -433,6 +460,8 @@ s8 BME280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
     if (status != HAL_OK)
     {
         // The BME280 API calls for 0 return value as a success, and -1 returned as failure
+        printf("\fInit:I2C_bus_read() Failed.");
+        HAL_Delay(10000);
         iError = (-1);
     }
     for (stringpos = BME280_INIT_VALUE; stringpos < cnt; stringpos++) {

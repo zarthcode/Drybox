@@ -61,26 +61,29 @@ void dataLogUpdate(void)
     dryboxLog.minDewPoint = (data.dewPoint < dryboxLog.minDewPoint) ? data.dewPoint : dryboxLog.minDewPoint;
 
     // Add the entry to the log
-    dryboxLog.Temperature[dryboxLog.entryCount] = data.temperature;
-    dryboxLog.Pressure[dryboxLog.entryCount] = data.pressure;
-    dryboxLog.Humidity[dryboxLog.entryCount] = data.humidity;
-    dryboxLog.DewPoint[dryboxLog.entryCount] = data.dewPoint;
-
-
-    if(dryboxLog.entryCount >= TREND_COUNT)
+    // TODO - Only log trends over longer periods of time.
     {
-        // Calculate trends
+        dryboxLog.Temperature[dryboxLog.entryCount] = data.temperature;
+        dryboxLog.Pressure[dryboxLog.entryCount] = data.pressure;
+        dryboxLog.Humidity[dryboxLog.entryCount] = data.humidity;
+        dryboxLog.DewPoint[dryboxLog.entryCount] = data.dewPoint;
 
-        dryboxLog.HumidityTrend = calculateTrend(dryboxLog.Humidity);
-        dryboxLog.TemperatureTrend = calculateTrend(dryboxLog.Temperature);
-        dryboxLog.PressureTrend = calculateTrend(dryboxLog.Pressure);
-        dryboxLog.DewPointTrend = calculateTrend(dryboxLog.DewPoint);
 
-    }
+        if (dryboxLog.entryCount >= TREND_COUNT)
+        {
+            // Calculate trends
 
-    if(++dryboxLog.entryCount == LOG_SIZE)
-    {
-        dryboxLog.entryCount = 0;
+            dryboxLog.HumidityTrend = calculateTrend(dryboxLog.Humidity);
+            dryboxLog.TemperatureTrend = calculateTrend(dryboxLog.Temperature);
+            dryboxLog.PressureTrend = calculateTrend(dryboxLog.Pressure);
+            dryboxLog.DewPointTrend = calculateTrend(dryboxLog.DewPoint);
+
+        }
+
+        if (++dryboxLog.entryCount >= LOG_SIZE)
+        {
+            dryboxLog.entryCount = 0;
+        }
     }
 
 }

@@ -135,7 +135,7 @@ int main(void)
 
 
   // Initialize the bme280
-  s32 result = bme280_interface_init();
+    s32 result = bme280_interface_init();
 
 
 
@@ -151,6 +151,9 @@ int main(void)
       if(nextLogUpdate < HAL_GetTick())
       {
           dataLogUpdate();
+          // bme280_data_t data;
+          // result = bme280_interface_get_data(&data);
+          // printf("\f%5.2f  %5.2f\n%5.2f  %5.2f", data.humidity, data.temperature, data.dewPoint, data.pressure);
           nextLogUpdate = HAL_GetTick() + LOG_INTERVAL;
       }
 
