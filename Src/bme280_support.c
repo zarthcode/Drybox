@@ -231,17 +231,15 @@ AND HUMIDITY DATA ********
     s32 com_rslt = bme280_set_power_mode(BME280_FORCED_MODE);
     if(com_rslt != SUCCESS)
     {
-        printf("\fbme280_set_power_mode %i.", com_rslt);
-        HAL_Delay(1000);
-        setInfoDisplayState(DP_CRITICAL, 15000);
+        sprintf(getInfoString(),"\fbme280_set_power_mode\nreturned %li.", com_rslt);
+        setInfoDisplayState(15000);
     }
 
     com_rslt = bme280_compute_wait_time(&v_delay_time);
     if(com_rslt != SUCCESS)
     {
-        printf("\fbme280_set_power_mode %i.", com_rslt);
-        HAL_Delay(1000);
-        setInfoDisplayState(DP_CRITICAL, 15000);
+        sprintf(getInfoString(),"\fbme280_compute_wait_tim\nreturned %li.", com_rslt);
+        setInfoDisplayState(15000);
     }
 
     HAL_Delay(v_delay_time);
@@ -290,9 +288,8 @@ AND HUMIDITY DATA ********
     // printf("\f%2.1f\337C %.2finHg\n%2.2f%%rH DP%2.1f\337C", imp_temp, imp_press, imp_humi, dewpt);
     if(com_rslt != SUCCESS)
     {
-        printf("\fbme280_interface_get_data %i.", com_rslt);
-        HAL_Delay(1000);
-        setInfoDisplayState(DP_CRITICAL, 15000);
+        sprintf(getInfoString(),"\fbme280_interface_get_data\n returned %li", com_rslt);
+        setInfoDisplayState(15000);
     }
 
     return com_rslt;
@@ -420,9 +417,8 @@ s8 BME280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
     {
         // The BME280 API calls for 0 return value as a success, and -1 returned as failure
         iError = (-1);
-        printf("\fInit:I2C_Mem_Write() Failed.");
-        HAL_Delay(10000);
-        setInfoDisplayState(DP_CRITICAL, 15000);
+        sprintf(getInfoString(),"\fInit:I2C_Mem_Write() Failed.\nHAL returned %i",status);
+        setInfoDisplayState(15000);
     }
     return (s8)iError;
 #else

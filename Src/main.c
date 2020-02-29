@@ -54,10 +54,10 @@ I2C_HandleTypeDef hi2c2;
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
-typedef enum blinkSpeed_t {OFF, SLOW, FAST};
+enum blinkSpeed_t {OFF, SLOW, FAST};
 enum blinkSpeed_t blinkInterval = FAST;
 
-typedef enum pressType_t {BTN_OFF, BTN_HELD, BTN_DEBOUNCE, BTN_SHORT, BTN_LONG};
+enum pressType_t {BTN_OFF, BTN_HELD, BTN_DEBOUNCE, BTN_SHORT, BTN_LONG};
 struct {
     uint32_t pressStart;
     uint32_t pressEnd;
@@ -131,8 +131,9 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   LCD_Init();
-  printf("\f  Black Widow\nDrybox Restarted");
-  setInfoDisplayState(DP_INFO, 4000);
+  sprintf(getInfoString(),"\f  Black Widow\nDrybox Restarted");
+  setInfoDisplayState(4000);
+
   // fflush(stdout);   // Either fflush(stdout) or stdbuf(stdout, NULL) needs to be called for printf to work properly.
 
 
@@ -264,17 +265,13 @@ int main(void)
           heaterState = newHeaterState;
           switch (heaterState)
           {
-              case HEATER_OFF:
-                  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
-                  break;
+              // case HEATER_OFF:
               case HEATER_ON:
                   HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
                   break;
-              case HEATER_LIMIT:
+              // case HEATER_LIMIT:
+              default:
                   HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
-                  break;
-              case DESSICANT_LIMIT:
-                  // Alarm
                   break;
           }
       }

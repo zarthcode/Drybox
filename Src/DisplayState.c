@@ -1,20 +1,22 @@
 //
 // Created by zarthrag on 2/25/20.
 //
+#include <HeaterFSM.h>
 #include "main.h"
 #include "DisplayState.h"
 #include "stdio.h"
 #include "bme280_interface.h"
 #include "dataLog.h"
+#include "HeaterFSM.h"
 
 #define DISPLAY_TIMEOUT 4000
 
-typedef enum displayState_t { DS_INFO, DS_TEMP, DS_HUMIDITY, DS_PRESSURE, DS_DEWPT, DS_DESSICANT, DS_ERRSTATE};
+enum displayState_t { DS_INFO, DS_SYSTEM, DS_TEMP, DS_HUMIDITY, DS_PRESSURE, DS_DEWPT, DS_DESSICANT, DS_ERRSTATE};
 enum displayState_t currentDisplayState = DS_TEMP;
 enum displayState_t nextDisplayState;
-uint32_t displayStateTimeout;
+uint32_t displayStateTimeout = DISPLAY_TIMEOUT;
 
-char infoScreen[128];
+char infoScreen[128] = {'\0'};
 bool infoScreenEnabled = false;
 uint32_t infoScreenTimeout = 0;
 
@@ -22,10 +24,34 @@ char errorScreen[128];
 bool errorScreenEnabled = false;
 uint32_t errorScreenTimeout = 0;
 
+char* fsmToString(enum ControlState_t state);
+
 char* getInfoString(void)
 {
 
     return infoScreen;
+}
+
+char* fsmToString(enum ControlState_t state)
+{
+    switch (state)
+    {
+
+        case FSM_INIT:
+            return " Reinitializing ";
+        case FSM_RH_TARGET:
+            return " #### IDLE #### ";
+        case FSM_RH_LIMIT:
+            return " ### DRYING ### ";
+        case FSM_TEMP_LIMIT:
+            return " ## OVERHEAT ## ";
+        case FSM_FATAL:
+            return " # FATAL ERROR #";
+        default:
+            return " Unimplemented!";
+            break;
+    }
+
 }
 
 char* getErrorString(void)
@@ -33,23 +59,31 @@ char* getErrorString(void)
     return errorScreen;
 }
 
-void setAlarmDisplayState(uint32_t timeout)
-{
-    // Set buzzer to on.
-
-}
-
 void setInfoDisplayState(uint32_t timeout)
 {
-
-    nextDisplayState = currentDisplayState; // Save the current display state
+    nextDisplayState = currentDisplayState;
     currentDisplayState = DS_INFO;
-    displayStateTimeout = HAL_GetTick() + timeout;
+    // TODO - Short beep
+    displayStateTimeout = timeout == 0 ? timeout : HAL_GetTick() + timeout;
+    printf(infoScreen);
+
 }
+
+void setErrorDisplayState(uint32_t timeout)
+{
+
+    // @todo Implement beep for error display
+    // @body A long beep needs to sound during DS_ERRSTATE.
+    nextDisplayState = currentDisplayState;
+    currentDisplayState = DS_ERRSTATE;
+    displayStateTimeout = timeout == 0 ? timeout : HAL_GetTick() + timeout;
+    printf(errorScreen);
+}
+
 void updateDisplayState(void)
 {
 
-    if((currentDisplayState != DS_ERRSTATE) && displayStateTimeout && (HAL_GetTick() > displayStateTimeout))
+    if(displayStateTimeout && (HAL_GetTick() > displayStateTimeout))
     {
         // Move to the next display state, unless there's an error screen, which needs to alternate with every other display.
         currentDisplayState = nextDisplayState;
@@ -65,6 +99,19 @@ void updateDisplayState(void)
     {
         case DS_INFO:
             // Display has an informational message already, leave it alone.
+            printf(infoScreen);
+            nextDisplayState = DS_SYSTEM;
+            break;
+        case DS_SYSTEM:
+            /* System display has Current state and action information.
+             * xxxxxxxxxxxxxxxxxx
+             * x   SYS_STATE    x
+             * x  STATE REASON  x
+             * xxxxxxxxxxxxxxxxxx
+             */
+            printf("\f%s\n%s",fsmToString(getSystemState()),getSystemStateString());
+            nextDisplayState = DS_TEMP;
+
 
             break;
         case DS_TEMP:
@@ -115,7 +162,7 @@ void updateDisplayState(void)
              */
             current = dataLogGetValue(DEWPOINT, &trend, &max, &min);
             printf("\f Dew Point (\337C) \n%04.1f  %04.1f%c %04.1f", min, current, ' ', max);
-            nextDisplayState = DS_TEMP;
+            nextDisplayState = DS_DESSICANT;
                 break;
         case DS_DESSICANT:
             /* Dessicant Status display has MIN CURRENT, trend arrow, and MAX
@@ -125,8 +172,12 @@ void updateDisplayState(void)
              * xxxxxxxxxxxxxxxxxx
              */
             // Show the estimated dessicant status.
+            printf("\f  Dessicant (\337C) \n Unimplemented", min, current, ' ', max);
+            nextDisplayState = DS_SYSTEM;
+
         case DS_ERRSTATE:
             // If an error message is available, show it.
+            printf(errorScreen);
             break;
         default:
             printf("\fDisplayState\nError (%i)", currentDisplayState);

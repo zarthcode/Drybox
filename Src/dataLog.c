@@ -70,8 +70,16 @@ void dataLogUpdate(void)
     dryboxLog.maxDewPoint = (data.dewPoint > dryboxLog.maxDewPoint) ? data.dewPoint : dryboxLog.maxDewPoint;
     dryboxLog.minDewPoint = (data.dewPoint < dryboxLog.minDewPoint) ? data.dewPoint : dryboxLog.minDewPoint;
 
+    // @todo Store log min/max data to flash memory.
+    // @body Keep observed max/min data in flash for easy reference. Especially minHumidity.
+
+    // @todo Add dessicant calculation to data log.
+    // @body Calculating dessicant performance can yield info on how long dessicant lasts, total drying capacity, etc.
+
+    // @todo Add cycle time calculation to data log.
+    // @body Adding cycle time info could help determine how long it takes to perform an average drying cycle. This can be compared to dessicant capacity, too.
+
     // Add the entry to the log
-    // TODO - Only log trends over longer periods of time.
     if(nextLog < HAL_GetTick())
     {
 
