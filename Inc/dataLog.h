@@ -22,9 +22,14 @@ void dataLogInit(void);
 // Updates the log with a new entry
 void dataLogUpdate(void);
 
+// Returns true if there are enough logs for trend data.
+bool trendAvailable(void);
+
 // Returns the requested value and trend
 float dataLogGetValue(datatype_t type, trend_t* trend, float *max, float *min);
 
+// Returns the humidity trend
+trend_t humidityTrend(void);
 
 
 #endif //DRYBOX_DATALOG_H

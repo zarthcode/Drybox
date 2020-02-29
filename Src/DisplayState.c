@@ -14,8 +14,34 @@ enum displayState_t currentDisplayState = DS_TEMP;
 enum displayState_t nextDisplayState;
 uint32_t displayStateTimeout;
 
-void setInfoDisplayState(uint8_t priority, uint32_t timeout)
+char infoScreen[128];
+bool infoScreenEnabled = false;
+uint32_t infoScreenTimeout = 0;
+
+char errorScreen[128];
+bool errorScreenEnabled = false;
+uint32_t errorScreenTimeout = 0;
+
+char* getInfoString(void)
 {
+
+    return infoScreen;
+}
+
+char* getErrorString(void)
+{
+    return errorScreen;
+}
+
+void setAlarmDisplayState(uint32_t timeout)
+{
+    // Set buzzer to on.
+
+}
+
+void setInfoDisplayState(uint32_t timeout)
+{
+
     nextDisplayState = currentDisplayState; // Save the current display state
     currentDisplayState = DS_INFO;
     displayStateTimeout = HAL_GetTick() + timeout;
@@ -25,7 +51,7 @@ void updateDisplayState(void)
 
     if((currentDisplayState != DS_ERRSTATE) && displayStateTimeout && (HAL_GetTick() > displayStateTimeout))
     {
-        // Move to the next display state.
+        // Move to the next display state, unless there's an error screen, which needs to alternate with every other display.
         currentDisplayState = nextDisplayState;
         displayStateTimeout = DISPLAY_TIMEOUT;
     }
@@ -100,7 +126,7 @@ void updateDisplayState(void)
              */
             // Show the estimated dessicant status.
         case DS_ERRSTATE:
-            // An error message is on screen, leave it forever.
+            // If an error message is available, show it.
             break;
         default:
             printf("\fDisplayState\nError (%i)", currentDisplayState);

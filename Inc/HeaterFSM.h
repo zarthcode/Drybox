@@ -5,9 +5,11 @@
 #ifndef DRYBOX_HEATERFSM_H
 #define DRYBOX_HEATERFSM_H
 
-typedef enum HeaterState_t { HEATER_OFF, HEATER_ON, HEATER_LIMIT, DESSICANT_LIMIT};
+typedef enum HeaterState_t { HEATER_OFF, HEATER_ON, HEATER_LIMIT };
 
-enum controlState_t getHeaterState();
+
+// Returns the state of the heater in the FSM.
+enum HeaterState_t getHeaterState();
 
 // Returns a % estimation of dessicant depletion.
 float getDessicantState(void);

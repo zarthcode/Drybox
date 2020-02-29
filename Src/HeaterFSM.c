@@ -5,6 +5,7 @@
 #include <stm32f0xx_hal.h>
 #include <stdio.h>
 #include <DisplayState.h>
+#include <dataLog.h>
 #include "HeaterFSM.h"
 #include "bme280_interface.h"
 
@@ -13,12 +14,16 @@ typedef enum controlState_t { FSM_INIT,             // Starting state.
                               FSM_RH_LIMIT,         // System is trying to return to optimal RH
                               FSM_RH_FALLING,
                               FSM_RH_FLAT,
+                              FSM_RH_INCREASING,
                               FSM_TEMP_LIMIT,       // System is approaching temp limit.
+                              FSM_DESSICANT,
                               FSM_FATAL             // System is in an error state.
                             };
 
 enum controlState_t fsmState = FSM_INIT;
-uint32_t stateTimeout = 0;
+enum controlState_t fsmPrev = FSM_INIT;     // Tracks the previous FSM state
+uint32_t stateTimeout = 0;  // Init state doesn't time out until trend data is available.
+
 
 // The target RH the drybox will try to maintain.
 #define RH_TARGET 10.0f
@@ -30,23 +35,33 @@ uint32_t stateTimeout = 0;
 #define RH_ALARM 18.0f
 
 // The maximum allowable temperature of the filament. (Keep this below Tglass)
-#define TEMP_MAX 50.0f
+#define TEMP_TARGET 50.0f
 
-enum controlState_t getHeaterState()
+// Overheat temperature
+#define TEMP_LIMIT 55.0f
+
+// Trend & inflection data
+trend_t previousTrend = INCREASING;
+bool bPlateau = false;
+
+
+enum HeaterState_t getHeaterState()
 {
     // Get current bme280 data.
     bme280_data_t data;
     if (bme280_interface_get_data(&data) != 0)
     {
         // Fatal error
+        fsmPrev = fsmState;
         fsmState = FSM_FATAL;
-        return FSM_FATAL;
+        return HEATER_OFF;
     }
 
     // Temperature limit overrides all other states.
     if (data.temperature > TEMP_MAX)
     {
         // Over temperature.
+        fsmPrev = fsmState;
         fsmState = FSM_TEMP_LIMIT;
 
         printf("\fOVER-TEMPERATURE\n   Heater Off");
@@ -60,51 +75,79 @@ enum controlState_t getHeaterState()
     switch(fsmState)
     {
         case FSM_INIT:
-            if(data.humidity > RH_LIMIT)
-            {
-                fsmState = FSM_RH_LIMIT;
-            }
-
             break;
-
-        case FSM_TEMP_LIMIT:
-            // Wait for the damn thing to cool off.
-            if (data.temperature < TEMP_MAX && stateTimeout < HAL_GetTick())
-            {
-                fsmState = FSM_INIT;    // Reset FSM state
-            }
-            break;
-
         case FSM_RH_TARGET:
-            // Within RH parameters.
-            printf("\f TARGET REACHED\nHeater Off");
-            setInfoDisplayState(DP_INFO, 5000);
-
+            if(data.humidity >= RH_LIMIT)
+            {
+                // Move to active drying state
+                fsmState = FSM_RH_LIMIT;
+                bPlateau = false;
+                previousTrend = humidityTrend();
+            }
             break;
-
         case FSM_RH_LIMIT:
-            if ( data.humidity <= FSM_RH_TARGET)
+            if(data.temperature >= TEMP_LIMIT)
             {
-                // Reached RH target, we're done!
-                fsmState = FSM_RH_TARGET;
+                // Over temperature
+                fsmState = FSM_TEMP_LIMIT;
             }
-            // Keep the heater on until it's either forced off, or RH trends down and stabilizes.
-            else if ( data.humidity < FSM_RH_LIMIT)
+            else
             {
-                // Determine if RH is trending flat
+                trend_t nextTrend = humidityTrend();
+                if (previousTrend != nextTrend)
+                {
+                    // There has been a transition.
 
+                    switch (nextTrend)
+                    {
 
-                // Recalculate dessicant capacity.
+                        case INCREASING:
+                            // If previously decreasing/flat, this is a bad sign
+                            stateTimeout = 1000 * 60 * 30;      // 30min timeout to change things.
+                            break;
+                        case DECREASING:
+                            // If previously flat/increasing, this is good.
+                            break;
+                        case FLAT:
+                            switch (previousTrend)
+                            {
+                                case INCREASING:
+                                    // Starting to get under control.
+                                    break;
+                                case DECREASING:
+                                    // If previously decreasing, we're done.
+                                    break;
+                                default:
+                                    break;
+                            }
+
+                            break;
+                        default:
+                            break;
+                    }
+                    previousTrend = nextTrend;
+                }
+                if (data.humidity <= RH_TARGET)
+                {
+                    // Reached target.
+                    fsmState = FSM_RH_TARGET;
+                }
+
 
             }
+
+
             //
-
+            break;
+        case FSM_TEMP_LIMIT:
+            // Wait for it to cool off below TARGET.
+            if(data.temperature < TEMP_TARGET)
+            {
+                fsmState = FSM_INIT;
+            }
             break;
 
-        default:
-            // Unknown state, reset
-            fsmState = FSM_INIT;
-            break;
+
     }
 
 

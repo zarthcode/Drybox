@@ -103,6 +103,8 @@ int main(void)
   buttonB1_state.pressEnd = 0;
   buttonB1_state.pressStart = 0;
 
+  enum HeaterState_t heaterState = HEATER_OFF;
+
   /* USER CODE END 1 */
 
 
@@ -255,6 +257,27 @@ int main(void)
       }
 
       // Heater Control FSM
+
+      enum HeaterState_t newHeaterState = getHeaterState();
+      if(newHeaterState != heaterState)
+      {
+          heaterState = newHeaterState;
+          switch (heaterState)
+          {
+              case HEATER_OFF:
+                  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
+                  break;
+              case HEATER_ON:
+                  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
+                  break;
+              case HEATER_LIMIT:
+                  HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
+                  break;
+              case DESSICANT_LIMIT:
+                  // Alarm
+                  break;
+          }
+      }
 
 
 

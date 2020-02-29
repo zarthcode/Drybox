@@ -11,6 +11,7 @@
 
 #define FLAT_THRESHOLD 0.05
 #define TREND_COUNT 3
+#define LOG_PERIOD 225000
 
 struct {
 
@@ -39,8 +40,17 @@ struct {
 
 } dryboxLog;
 
+// Trend Timing function
+uint32_t nextLog = 0;
+
+
 // Trend calculation function
 trend_t calculateTrend(const float* array);
+
+bool trendAvailable(void)
+{
+    return (dryboxLog.entryCount >= TREND_COUNT);
+}
 
 void dataLogUpdate(void)
 {
@@ -62,7 +72,9 @@ void dataLogUpdate(void)
 
     // Add the entry to the log
     // TODO - Only log trends over longer periods of time.
+    if(nextLog < HAL_GetTick())
     {
+
         dryboxLog.Temperature[dryboxLog.entryCount] = data.temperature;
         dryboxLog.Pressure[dryboxLog.entryCount] = data.pressure;
         dryboxLog.Humidity[dryboxLog.entryCount] = data.humidity;
@@ -84,8 +96,16 @@ void dataLogUpdate(void)
         {
             dryboxLog.entryCount = 0;
         }
+
+        // Determine the time of the next log entry.
+        nextLog = HAL_GetTick() + LOG_PERIOD;
     }
 
+}
+
+trend_t humidityTrend(void)
+{
+    return dryboxLog.HumidityTrend;
 }
 
 trend_t calculateTrend(const float* array)
