@@ -10,13 +10,10 @@ enum HeaterState_t { HEATER_OFF, HEATER_ON, HEATER_LIMIT };
 enum ControlState_t {
     FSM_NONE,             // NULL state
     FSM_INIT,             // Starting state.
-    FSM_RH_TARGET,        // System RH is in optimal range.
-    FSM_RH_LIMIT,         // System is trying to return to optimal RH
-    FSM_RH_FALLING,
-    FSM_RH_FLAT,
-    FSM_RH_INCREASING,
+    FSM_TEMP_HEAT,        // Active heating state
+    FSM_TEMP_TARGET,      // Temperature is at target
     FSM_TEMP_LIMIT,       // System is approaching temp limit.
-    FSM_DESSICANT,
+    FSM_TEMP_OVERHEAT,    // System is too hot
     FSM_FATAL             // System is in an error state.
 };
 

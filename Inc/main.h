@@ -32,6 +32,7 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <unistd.h>
 #include "bme280.h"
 /* USER CODE END Includes */
 
@@ -69,6 +70,8 @@ void Error_Handler(void);
 #define LD4_GPIO_Port GPIOC
 #define LD3_Pin GPIO_PIN_9
 #define LD3_GPIO_Port GPIOC
+#define BUZZ_Pin GPIO_PIN_8
+#define BUZZ_GPIO_Port GPIOA
 #define SWDIO_Pin GPIO_PIN_13
 #define SWDIO_GPIO_Port GPIOA
 #define SWCLK_Pin GPIO_PIN_14

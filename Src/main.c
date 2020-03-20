@@ -19,23 +19,25 @@
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
-#include <unistd.h>
-#include <DisplayState.h>
 #include "main.h"
-#include "dataLog.h"
-#include <bme280_interface.h>
-#include <HeaterFSM.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <DisplayState.h>
 #include "LCD.h"
 #include "bme280.h"
 #include "stdio.h"
+#include "dataLog.h"
+#include <bme280_interface.h>
+#include <HeaterFSM.h>
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+enum blinkSpeed_t {OFF, SLOW, FAST};
+enum pressType_t {BTN_OFF, BTN_HELD, BTN_DEBOUNCE, BTN_SHORT, BTN_LONG };
+enum buzzerState_t { BUZZ_OFF, BUZZ_BUZZING, BUZZ_PAUSING, BUZZ_SHORT, BUZZ_LONG, BUZZ_DOUBLE };
 
 /* USER CODE END PTD */
 
@@ -54,16 +56,22 @@ I2C_HandleTypeDef hi2c2;
 TIM_HandleTypeDef htim1;
 
 /* USER CODE BEGIN PV */
-enum blinkSpeed_t {OFF, SLOW, FAST};
 enum blinkSpeed_t blinkInterval = FAST;
 
-enum pressType_t {BTN_OFF, BTN_HELD, BTN_DEBOUNCE, BTN_SHORT, BTN_LONG};
 struct {
     uint32_t pressStart;
     uint32_t pressEnd;
     enum pressType_t pressType;
 } buttonB1_state;
 uint32_t nextBlink = 0;
+
+struct {
+    enum buzzerState_t state;
+    uint32_t freq;
+    uint32_t timeout;
+    uint32_t beepsRemaining;
+    uint32_t duration;
+} buzzerState;
 
 #define BUTTON_DEBOUNCE 150
 #define BUTTON_LONG 2000
@@ -79,13 +87,40 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_TIM1_Init(void);
+void ShortBuzz(void);
+void LongBuzz(void);
+void DoubleBuzz(void);
 /* USER CODE BEGIN PFP */
 
-s32 bme280_data_readout_template(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void ShortBuzz(void)
+{
+    if(buzzerState.state == BUZZ_OFF)
+    {
+        buzzerState.state = BUZZ_SHORT;
+    }
+
+}
+
+void LongBuzz(void)
+{
+    if(buzzerState.state == BUZZ_OFF)
+    {
+        buzzerState.state = BUZZ_LONG;
+    }
+}
+
+void DoubleBuzz(void)
+{
+    if(buzzerState.state == BUZZ_OFF)
+    {
+        buzzerState.state = BUZZ_DOUBLE;
+    }
+}
 
 /* USER CODE END 0 */
 
@@ -103,10 +138,15 @@ int main(void)
   buttonB1_state.pressEnd = 0;
   buttonB1_state.pressStart = 0;
 
+  buzzerState.state = BUZZ_OFF;
+  buzzerState.timeout = 0;
+  buzzerState.freq = 1;
+  buzzerState.beepsRemaining = 0;
+
   enum HeaterState_t heaterState = HEATER_OFF;
 
   /* USER CODE END 1 */
-
+  
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -138,9 +178,11 @@ int main(void)
 
 
   // Initialize the bme280
-    s32 result = bme280_interface_init();
-
-
+  s32 result = bme280_interface_init();
+  if (result != 0)
+    DoubleBuzz();
+  else
+    LongBuzz();
 
     /* USER CODE END 2 */
  
@@ -150,6 +192,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+      // Watchdog Timer Reset
+      // HAL_WWDG_Refresh(&hwwdg);
+
       // Update the data log and FSM
       if(nextLogUpdate < HAL_GetTick())
       {
@@ -217,16 +263,85 @@ int main(void)
               blinkInterval = blinkInterval == FAST ? SLOW : FAST;
               buttonB1_state.pressType = BTN_OFF;
               cycleRequest();
+              ShortBuzz();
               break;
           case BTN_LONG:
               blinkInterval = OFF;
               buttonB1_state.pressType = BTN_OFF;
               dessicantReset();
+              LongBuzz();
               break;
           default:
               buttonB1_state.pressType = BTN_OFF;
               buttonB1_state.pressStart = 0;
               buttonB1_state.pressEnd = 0;
+      }
+
+      // Buzzer State
+      switch(buzzerState.state)
+      {
+          case BUZZ_OFF:
+              // Nothing to do.
+              break;
+          case BUZZ_SHORT:
+              buzzerState.duration = 250;
+              buzzerState.beepsRemaining = 1;
+              buzzerState.timeout = 0;
+              buzzerState.freq = 1;
+              buzzerState.state = BUZZ_PAUSING;
+              break;
+          case BUZZ_LONG:
+              buzzerState.duration = 500;
+              buzzerState.beepsRemaining = 1;
+              buzzerState.timeout = 0;
+              buzzerState.freq = 1;
+              buzzerState.state = BUZZ_PAUSING;
+              break;
+          case BUZZ_DOUBLE:
+              buzzerState.duration = 250;
+              buzzerState.beepsRemaining = 2;
+              buzzerState.timeout = 0;
+              buzzerState.freq = 1;
+              buzzerState.state = BUZZ_PAUSING;
+              break;
+          case BUZZ_BUZZING:
+              // Check timeout
+              if(buzzerState.timeout < HAL_GetTick())
+              {
+                  // Stop buzzing.
+                  HAL_TIM_PWM_Stop(&htim1, TIM_CHANNEL_1);
+
+                  // Pause if there is more beeping to do.
+                  if(--buzzerState.beepsRemaining >= 1)
+                  {
+                      buzzerState.state = BUZZ_PAUSING;
+                      buzzerState.timeout = HAL_GetTick() + 200;
+                  }
+                  else
+                  {
+                      buzzerState.state = BUZZ_OFF;
+                  }
+
+              }
+              break;
+          case BUZZ_PAUSING:
+              //
+              if(buzzerState.timeout < HAL_GetTick())
+              {
+
+                  // Start buzzing.
+                  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+
+                  // Pause if there is more beeping to do.
+                  buzzerState.state = BUZZ_BUZZING;
+                  buzzerState.timeout = HAL_GetTick() + buzzerState.duration;
+
+              }
+
+              break;
+          default:
+              break;
+
       }
 
 
@@ -251,37 +366,32 @@ int main(void)
       {
           if(nextBlink < HAL_GetTick())
           {
-              HAL_GPIO_TogglePin(LD3_GPIO_Port,LD3_Pin);
+              // HAL_GPIO_TogglePin(LD3_GPIO_Port,LD3_Pin);
               nextBlink = HAL_GetTick() + interval;
           }
 
       }
+      HAL_GPIO_TogglePin(LD3_GPIO_Port,LD3_Pin);
 
       // Heater Control FSM
-
       enum HeaterState_t newHeaterState = getHeaterState();
       if(newHeaterState != heaterState)
       {
           heaterState = newHeaterState;
           switch (heaterState)
           {
-              // case HEATER_OFF:
               case HEATER_ON:
                   HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_SET);
                   break;
               // case HEATER_LIMIT:
+              case HEATER_OFF:
               default:
                   HAL_GPIO_WritePin(LD4_GPIO_Port, LD4_Pin, GPIO_PIN_RESET);
                   break;
           }
       }
 
-
-
-      // Watchdog Timer Reset
-
-      /* USER CODE END WHILE */
-
+    /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
@@ -340,7 +450,7 @@ static void MX_I2C2_Init(void)
 
   /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.Timing = 0x20303E5D;
+  hi2c2.Init.Timing = 0x2010091A;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -391,9 +501,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 12;
+  htim1.Init.Prescaler = 24000;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 2000;
+  htim1.Init.Period = 2;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
@@ -417,7 +527,7 @@ static void MX_TIM1_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 1;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
@@ -505,7 +615,6 @@ void Error_Handler(void)
   while(1) {};
 
   /* USER CODE END Error_Handler_Debug */
-
 }
 
 #ifdef  USE_FULL_ASSERT

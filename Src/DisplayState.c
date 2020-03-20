@@ -39,17 +39,18 @@ char* fsmToString(enum ControlState_t state)
 
         case FSM_INIT:
             return " Reinitializing ";
-        case FSM_RH_TARGET:
+        case FSM_TEMP_TARGET:
             return " #### IDLE #### ";
-        case FSM_RH_LIMIT:
+        case FSM_TEMP_HEAT:
             return " ### DRYING ### ";
-        case FSM_TEMP_LIMIT:
+        case FSM_TEMP_OVERHEAT:
             return " ## OVERHEAT ## ";
+        case FSM_TEMP_LIMIT:
+            return " ## LIMITING ## ";
         case FSM_FATAL:
             return " # FATAL ERROR #";
         default:
             return " Unimplemented!";
-            break;
     }
 
 }
@@ -162,7 +163,7 @@ void updateDisplayState(void)
              */
             current = dataLogGetValue(DEWPOINT, &trend, &max, &min);
             printf("\f Dew Point (\337C) \n%04.1f  %04.1f%c %04.1f", min, current, ' ', max);
-            nextDisplayState = DS_DESSICANT;
+            nextDisplayState = DS_SYSTEM;
                 break;
         case DS_DESSICANT:
             /* Dessicant Status display has MIN CURRENT, trend arrow, and MAX

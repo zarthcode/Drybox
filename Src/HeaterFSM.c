@@ -10,6 +10,10 @@
 #include "HeaterFSM.h"
 #include "bme280_interface.h"
 
+/**
+ * The HeaterFSM needs to monitor the humidity - if it's flat, do nothing.
+ * Maintain the air at temp target, which should raise the humidity in the air, ensuring it isn't int he filament.
+ */
 
 enum ControlState_t fsmState = FSM_INIT;
 enum ControlState_t fsmPrev = FSM_INIT;     // Tracks the previous FSM state
@@ -17,19 +21,22 @@ uint32_t stateTimeout = 0;  // Init state doesn't time out until trend data is a
 enum HeaterState_t HeaterState = HEATER_OFF;
 
 // The target RH the drybox will try to maintain.
-#define RH_TARGET 10.0f
+#define RH_TARGET 17.0f
 
 // The RH that the drybox will treat as an upper limit/hysteresis.
-#define RH_LIMIT 15.0f
+#define RH_LIMIT 19.0f
 
 // The RH that the drybox will treat the dessicant as depleted.
-#define RH_ALARM 18.0f
+#define RH_ALARM 22.0f
+
+// Minimum allowed temperature inside the drybox.
+#define TEMP_MINIMUM 33.0f
 
 // The maximum allowable temperature of the filament. (Keep this below Tglass)
-#define TEMP_TARGET 50.0f
+#define TEMP_TARGET 35.0f
 
 // Overheat temperature
-#define TEMP_LIMIT 55.0f
+#define TEMP_LIMIT 40.0f
 
 // Trend & inflection data
 trend_t previousTrend = INCREASING;
@@ -56,47 +63,61 @@ enum HeaterState_t getHeaterState()
         case FSM_INIT:
             // @todo Stay in FSM_INIT until trend is available.
             // @body The FSM should collect data before activating the heater, unless a request is received.
-            if(data.humidity <= RH_TARGET)
+            if(data.temperature <= TEMP_TARGET)
             {
-                sprintf(stateData," RH below target");
-                nextState = FSM_RH_TARGET;
+                sprintf(&stateData[0],"Heating");
+                nextState = FSM_TEMP_HEAT;
             }
             else
             {
-                sprintf(stateData," RH above limit");
-                nextState = FSM_RH_LIMIT;
+                sprintf(stateData,"Temp at target");
+                nextState = FSM_TEMP_TARGET;
             }
             HeaterState = HEATER_OFF;
             break;
-        case FSM_RH_TARGET:
-            if(data.humidity >= RH_LIMIT)
+        case FSM_TEMP_TARGET:   // Temperature is within bounds.
+            if(data.temperature <= TEMP_MINIMUM)
             {
-                // Move to active drying state
-                sprintf(stateData," RH above limit");
-                nextState = FSM_RH_LIMIT;
+                // Move to active heating state
+                sprintf(stateData," Temp below min");
+                nextState = FSM_TEMP_HEAT;
                 bPlateau = false;
                 previousTrend = humidityTrend();
             }
             HeaterState = HEATER_OFF;
             break;
-        case FSM_RH_LIMIT:
+        case FSM_TEMP_LIMIT:
             if(data.temperature >= TEMP_LIMIT)
             {
                 // Over temperature
                 sprintf(stateData, "Over Temperature");
-                nextState = FSM_TEMP_LIMIT;
+                nextState = FSM_TEMP_OVERHEAT;
             }
-            else if(data.humidity <= RH_TARGET)
+            else if(data.temperature <= TEMP_TARGET)
             {
-                // Finished
-                sprintf(stateData," RH below Target");
-                nextState = FSM_RH_TARGET;
+                // Temperature below minimum
+                sprintf(stateData,"Temp at Target");
+                nextState = FSM_TEMP_HEAT;
+            }
+            HeaterState = HEATER_OFF;
+            break;
+        case FSM_TEMP_HEAT:
+            if(data.temperature >= TEMP_LIMIT)
+            {
+                // Over temperature
+                sprintf(stateData, "Over Temperature");
+                nextState = FSM_TEMP_OVERHEAT;
+            }
+            else if(data.temperature >= TEMP_TARGET)
+            {
+                sprintf(stateData, "Temp at Target");
+                nextState = FSM_TEMP_TARGET;
             }
             HeaterState = HEATER_ON;
             break;
-        case FSM_TEMP_LIMIT:
+        case FSM_TEMP_OVERHEAT:
             // Wait for it to cool off below TARGET.
-            if(data.temperature < TEMP_TARGET)
+            if(data.temperature <= TEMP_LIMIT)
             {
                 sprintf(stateData," System temp OK");
                 nextState = FSM_INIT;
@@ -139,7 +160,7 @@ void cycleRequest(void)
     else
     {
         sprintf(stateData,"CYCLE REQUESTED");
-        fsmState = FSM_RH_LIMIT;
+        fsmState = FSM_TEMP_HEAT;
         // @todo Implement cycle timeout.
         // @body States should have a cycle timeout to prevent 100% duty cycle of the heater.
         stateTimeout = HAL_GetTick() + 1000 * 60 * 45;      // 45min cycle
@@ -161,7 +182,7 @@ void dessicantReset(void)
     else
     {
         sprintf(stateData,"DESSICANT CHANGE");
-        fsmState = FSM_RH_LIMIT;
+        fsmState = FSM_TEMP_HEAT;
         // @todo Implement cycle timeout.
         // @body States should have a cycle timeout to prevent 100% duty cycle of the heater.
         stateTimeout = HAL_GetTick() + 1000 * 60 * 45;      // 45min cycle
