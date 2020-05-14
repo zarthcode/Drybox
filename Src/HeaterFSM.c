@@ -21,22 +21,23 @@ uint32_t stateTimeout = 0;  // Init state doesn't time out until trend data is a
 enum HeaterState_t HeaterState = HEATER_OFF;
 
 // The target RH the drybox will try to maintain.
-#define RH_TARGET 17.0f
+#define RH_TARGET 10.0f
 
 // The RH that the drybox will treat as an upper limit/hysteresis.
-#define RH_LIMIT 19.0f
+#define RH_LIMIT 15.0f
 
 // The RH that the drybox will treat the dessicant as depleted.
-#define RH_ALARM 22.0f
+#define RH_ALARM 20.0f
 
 // Minimum allowed temperature inside the drybox.
-#define TEMP_MINIMUM 33.0f
+#define TEMP_MINIMUM 30.0f
 
 // The maximum allowable temperature of the filament. (Keep this below Tglass)
-#define TEMP_TARGET 35.0f
+#define TEMP_TARGET 51.0f
 
 // Overheat temperature
-#define TEMP_LIMIT 40.0f
+#define TEMP_LIMIT 55.0f
+
 
 // Trend & inflection data
 trend_t previousTrend = INCREASING;
@@ -65,7 +66,12 @@ enum HeaterState_t getHeaterState()
             // @body The FSM should collect data before activating the heater, unless a request is received.
             if(data.temperature <= TEMP_TARGET)
             {
-                sprintf(&stateData[0],"Heating");
+                sprintf(&stateData[0],"Heating to TGT");
+                nextState = FSM_TEMP_HEAT;
+            }
+            else if (data.humidity > RH_TARGET)
+            {
+                sprintf(&stateData[0], "RH above TGT");
                 nextState = FSM_TEMP_HEAT;
             }
             else
@@ -80,6 +86,14 @@ enum HeaterState_t getHeaterState()
             {
                 // Move to active heating state
                 sprintf(stateData," Temp below min");
+                nextState = FSM_TEMP_HEAT;
+                bPlateau = false;
+                previousTrend = humidityTrend();
+            }
+            else if (data.humidity > RH_TARGET)
+            {
+                // RH is too high
+                sprintf(stateData,"Humidity > TGT");
                 nextState = FSM_TEMP_HEAT;
                 bPlateau = false;
                 previousTrend = humidityTrend();
@@ -113,6 +127,12 @@ enum HeaterState_t getHeaterState()
                 sprintf(stateData, "Temp at Target");
                 nextState = FSM_TEMP_TARGET;
             }
+            else if(HAL_GetTick()/(1000*60) - stateTimeout > 60)
+            {
+                // It's been over 60 minutes
+                sprintf(stateData, "Heat Timeout");
+                nextState = FSM_TEMP_TARGET;
+            }
             HeaterState = HEATER_ON;
             break;
         case FSM_TEMP_OVERHEAT:
@@ -134,6 +154,9 @@ enum HeaterState_t getHeaterState()
 
     if(nextState != FSM_NONE)
     {
+        // Reset time since last state change
+        stateTimeout = HAL_GetTick()/(1000*60); // Determine time to the nearest minute.
+
         fsmPrev = fsmState;
         fsmState = nextState;
     }

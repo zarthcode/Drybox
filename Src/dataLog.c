@@ -115,6 +115,14 @@ trend_t humidityTrend(void)
 {
     return dryboxLog.HumidityTrend;
 }
+trend_t tempTrend(void)
+{
+    return dryboxLog.TemperatureTrend;
+}
+trend_t dewPtTrend(void)
+{
+    return dryboxLog.DewPointTrend;
+}
 
 trend_t calculateTrend(const float* array)
 {

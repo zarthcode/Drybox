@@ -30,6 +30,8 @@ float dataLogGetValue(datatype_t type, trend_t* trend, float *max, float *min);
 
 // Returns the humidity trend
 trend_t humidityTrend(void);
+trend_t dewPtTrend(void);
+trend_t tempTrend(void);
 
 
 #endif //DRYBOX_DATALOG_H

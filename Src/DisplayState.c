@@ -103,6 +103,7 @@ void updateDisplayState(void)
             printf(infoScreen);
             nextDisplayState = DS_SYSTEM;
             break;
+
         case DS_SYSTEM:
             /* System display has Current state and action information.
              * xxxxxxxxxxxxxxxxxx
@@ -115,6 +116,7 @@ void updateDisplayState(void)
 
 
             break;
+
         case DS_TEMP:
             /* Temp display has min, current, trend arrow, and max
              * xxxxxxxxxxxxxxxxxx
@@ -124,10 +126,12 @@ void updateDisplayState(void)
              */
             // Get Temp values
             current = dataLogGetValue(TEMPERATURE, &trend, &max, &min);
+            trend = tempTrend();
             // Display the current temperature.
-            printf("\f   Temp  (\337C)   \n%4.1f  %4.1f%c %4.1f", min, current, ' ', max);
+            printf("\f   Temp  (\337C)   \n%4.1f  %4.1f%c %4.1f", min, current, trend == FLAT ? '-' : (trend == INCREASING ? '^' : 'v'), max);
             nextDisplayState = DS_HUMIDITY;
             break;
+
         case DS_HUMIDITY:
             /* Humidity display has MIN CURRENT, trend arrow, and MAX
              * xxxxxxxxxxxxxxxxxx
@@ -136,8 +140,9 @@ void updateDisplayState(void)
              * xxxxxxxxxxxxxxxxxx
              */
             current = dataLogGetValue(HUMIDITY, &trend, &max, &min);
+            trend = humidityTrend();
             // Display the humidity
-            printf("\f Humidity (%%RH)\n%04.1f  %04.1f%c %04.1f", min, current, ' ', max);
+            printf("\f Humidity (%%RH)\n%04.1f  %04.1f%c %04.1f", min, current, trend == FLAT ? '-' : (trend == INCREASING ? '^' : 'v'), max);
             nextDisplayState = DS_PRESSURE;
 
             break;
@@ -150,6 +155,7 @@ void updateDisplayState(void)
              */
             // Display the pressure
             current = dataLogGetValue(PRESSURE, &trend, &max, &min);
+
             printf("\f Pressure (inHg)\n%04.1f %05.2f%c %04.1f", min, current, ' ', max);
             nextDisplayState = DS_DEWPT;
 
@@ -162,9 +168,11 @@ void updateDisplayState(void)
              * xxxxxxxxxxxxxxxxxx
              */
             current = dataLogGetValue(DEWPOINT, &trend, &max, &min);
-            printf("\f Dew Point (\337C) \n%04.1f  %04.1f%c %04.1f", min, current, ' ', max);
-            nextDisplayState = DS_SYSTEM;
-                break;
+            trend = dewPtTrend();
+            printf("\f Dew Point (\337C) \n%04.1f  %04.1f%c %04.1f", min, current,trend == FLAT ? '-' : (trend == INCREASING ? '^' : 'v'), max);
+            nextDisplayState = DS_DESSICANT;
+            break;
+
         case DS_DESSICANT:
             /* Dessicant Status display has MIN CURRENT, trend arrow, and MAX
              * xxxxxxxxxxxxxxxxxx
@@ -173,8 +181,11 @@ void updateDisplayState(void)
              * xxxxxxxxxxxxxxxxxx
              */
             // Show the estimated dessicant status.
-            printf("\f  Dessicant (\337C) \n Unimplemented", min, current, ' ', max);
+            current = dataLogGetValue(HUMIDITY, &trend, &max, &min);
+            current = (((current<20.0f ? current : 20.0f)-min)/(20.0f - min))*100.0f;
+            printf("\f  Dessicant (\337C) \n %2.1f%%", current);
             nextDisplayState = DS_SYSTEM;
+            break;
 
         case DS_ERRSTATE:
             // If an error message is available, show it.
